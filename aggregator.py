@@ -3,17 +3,16 @@
 import json
 import logging
 import math
+import os
 import pprint
 import re
 import sys
 import time
-import os
 
 import requests
 from mysql.connector import connect, Error
 
 UTC_TIMESTAMP = int(time.time())
-
 
 if not os.path.exists('logs'):
     os.makedirs('logs')
@@ -150,7 +149,6 @@ for local_ad in latest_local_ads_list:
     latest_local_ads[local_ad["ad_id"]] = FROM_LOCAL
 logger.info(f"Queried latest {len(latest_local_ads_list)} ads from local storage")
 
-
 if latest_local_ads is None:
     logger.info("No local ads")
 
@@ -181,8 +179,9 @@ phone_tuple_list = []
 
 total_ads = 0
 ads_per_page = 0
-pages_approx = 1  # pages estimate should be 1
+total_pages_approx = 1  # pages estimate should be 1
 current_page = 0
+next_page_number = 1
 
 ad_detail_request_count = 0
 ad_list_request_count = 0
@@ -190,7 +189,6 @@ ad_list_request_count = 0
 ads_fetched = {}
 pages_fetched = 0
 
-page_count = 1
 ids_of_ads_to_fetch = []
 saved_to_local_count = 0
 
@@ -206,65 +204,94 @@ ad_fetch_failure_count = 0
 ad_list_fetch_failure_count = 0
 retry_list = []
 
-while len(ads_fetched) < FETCH_LIMIT and page_count <= pages_approx:
+
+def get_ad_id_list(_response_json: dict) -> list:
+    if "ads" not in _response_json:
+        raise Exception("No ad list found in response. Cannot parse further")
+    ad_id_list = _response_json["ads"]
+
+    return ad_id_list
+
+
+def filter_fetched_ad_ids(_ad_id_list: list) -> list:
+    """filter the list of fetched id strings
+
+    if the ad detail is already fetched in this session or on a previous session i.e. ad is in local storage,
+    remove it from the list of ids to be fetched
+
+    depends on the dictionaries of local ads and ads fetched in current session
+
+    :param _ad_id_list: list
+    :return: filtered ad id list : list
+    """
+    filtered = []
+    for _ad in _ad_id_list:
+        _ad_id = _ad["id"]
+
+        if _ad_id not in latest_local_ads and _ad_id not in ads_fetched:
+            filtered.append(_ad_id)
+        else:
+            logger.info(f"{_ad_id} already fetched. Available in - "
+                        f"local ads? {_ad_id in latest_local_ads}. "
+                        f"fetched ads? {_ad_id in ads_fetched}")
+    return filtered
+
+
+while len(ads_fetched) < FETCH_LIMIT and next_page_number <= total_pages_approx:
     try:
         # get the ad list
-        ad_list_url = AD_LIST_BASE_URL + str(page_count)
+        ad_list_url = AD_LIST_BASE_URL + str(next_page_number)
+
         logger.info(f"Requesting ad list page with url: {ad_list_url}")
+
         response = requests.get(ad_list_url, headers=headers)
         ad_list_request_count += 1
+
         logger.info(f"Server responded with {response.status_code}")
         logger.info(f"Waiting for {WAIT_SECONDS} seconds")
+
         time.sleep(WAIT_SECONDS)
 
         if response.status_code == HTTP_SUCCESS:
             response_json = response.json()
-            pagination_data = response_json["paginationData"]
+            logger.info(f"Page {next_page_number} fetched successfully")
 
-            logger.info(f"Page {page_count} fetched successfully")
+            pagination_data = response_json["paginationData"]
 
             # set the values from first fetched page only
             if current_page == 0:
                 total_ads = pagination_data["total"]
                 ads_per_page = pagination_data["pageSize"]
-                pages_approx = math.ceil(total_ads / ads_per_page)
+                total_pages_approx = math.ceil(total_ads / ads_per_page)
 
             current_page = pagination_data["activePage"]
+
             pages_fetched += 1
-            page_count += 1
+            next_page_number += 1
 
             logger.info(f"Total Ads at script start: {total_ads}")
             logger.info(f"Ads per page: {ads_per_page}")
-            logger.info(f"Pages estimate: {pages_approx}")
+            logger.info(f"Pages estimate: {total_pages_approx}")
             logger.info(f"Pages fetched: {pages_fetched}")
             logger.info(f"Current page: {current_page}")
 
-            if "ads" not in response_json:
-                raise Exception("No ad list found in response. Cannot parse further")
-            fetched_ad_list = response_json["ads"]
-
-            if len(fetched_ad_list) == 0:
-                logger.info("This page does not contain any ads")
-                if page_count > pages_approx:
-                    logger.info("No more ad list pages to fetch")
-                    continue
+            fetched_ad_list = get_ad_id_list(response_json)
 
             # clear ad_id_list of ads from previous pages if any
             ids_of_ads_to_fetch.clear()
             logger.info(f"Retry has {len(retry_list)} ads")
 
-            # put all ids in the ad search-list in list
-            for ad in fetched_ad_list:
-                ad_id = ad["id"]
-                # if ad_id in latest_local_ads:
-                #     ads_fetched[ad_id] = FROM_LOCAL
+            # has 'ads' key
+            if len(fetched_ad_list) == 0:
+                logger.info("This page does not contain any ads")
+                # is this condition necessary?
+                if next_page_number > total_pages_approx:
+                    logger.info("No more ad list pages to fetch")
+                    continue
 
-                if ad_id not in latest_local_ads and ad_id not in ads_fetched:
-                    ids_of_ads_to_fetch.append(ad_id)
-                else:
-                    logger.info(f"{ad_id} does not need to be fetched. "
-                                f"Is ad in latest local ads? {ad_id in latest_local_ads}. "
-                                f"Is ad in fetched ads? {ad_id in ads_fetched}")
+            # put all ids in the ad search-list in list
+
+            ids_of_ads_to_fetch.extend(filter_fetched_ad_ids(fetched_ad_list))
 
             logger.info(f"number of ads to be fetched from list: {len(ids_of_ads_to_fetch)}")
 
@@ -286,11 +313,15 @@ while len(ads_fetched) < FETCH_LIMIT and page_count <= pages_approx:
                 # fetch ad with id
                 ad_url = AD_DETAIL_BASE_URL + ad_id
                 logger.info(f"Requesting ad details with url: {ad_url}")
+
                 response = requests.get(ad_url, headers={"User-Agent": USER_AGENT, "referer": referer})
                 ad_detail_request_count += 1
+
                 logger.info(f"Responded with status {response.status_code}")
+
                 logger.info(f"Waiting for {WAIT_SECONDS} seconds")
                 time.sleep(WAIT_SECONDS)
+
                 if response.status_code == HTTP_SUCCESS:
                     ad_json = response.json()
                     ad = ad_json["ad"]
@@ -314,11 +345,15 @@ while len(ads_fetched) < FETCH_LIMIT and page_count <= pages_approx:
 
                     print(temp_ad)
                     ad_tuple_list.append(tuple(temp_ad))
+
+                    # note the ads fetched in this session
                     ads_fetched[ad["id"]] = FROM_SERVER  # only the key matters
+
                     logger.info(f"Fetched {ad_id} successfully")
                 else:
                     logger.critical(f"Failed to fetch ad {ad_id} with status {response.status_code}")
 
+                    # todo fix ad fetch fails
                     if ad_id in retry_list:
                         logger.info("Ad is already in retry list, removing from retry list")
                         retry_list.remove(ad_id)
@@ -328,6 +363,7 @@ while len(ads_fetched) < FETCH_LIMIT and page_count <= pages_approx:
                     elif len(retry_list) >= MAX_FAILS:
                         logger.info(f"Too many ads failed. Not adding to retry list")
 
+                    # fetch next ad
                     continue
 
             # save in database
@@ -370,6 +406,7 @@ while len(ads_fetched) < FETCH_LIMIT and page_count <= pages_approx:
                 else:
                     logger.warning("Some ad property data were not saved!")
 
+                # clears phone and properties data even if not stored in local database
                 phone_tuple_list.clear()
                 properties_tuple_list.clear()
 
@@ -379,7 +416,7 @@ while len(ads_fetched) < FETCH_LIMIT and page_count <= pages_approx:
             ad_list_fetch_failure_count += 1
             if ad_list_fetch_failure_count == MAX_FAILS:
                 logger.critical(f"Failed to fetch ad list {ad_list_fetch_failure_count} times. Trying the next page...")
-                page_count += 1
+                next_page_number += 1
                 continue
             logger.warning(f"Retrying request {ad_list_url}")
             continue
@@ -400,6 +437,9 @@ while len(ads_fetched) < FETCH_LIMIT and page_count <= pages_approx:
         logger.critical("User interrupt. Exiting...")
         break
     except Exception as exc:
+        # When 'ads' key is not found in response_json the raised exception is caught here
+        # next_page_number is already incremented when this exception is raised and the handling is to 'continue'
+        # the loop.
         logger.exception(exc)
         continue
 
