@@ -1,0 +1,14 @@
+{
+  "FETCH_LIMIT": 10,
+  "WAIT_SECONDS": 3,
+  "MAX_FAILS": 2,
+  "DATABASE_NAME": "",
+  "USERNAME": "",
+  "PASSWORD": "",
+  "HOSTNAME": "",
+  "PROXIES": {
+    "HTTPS": "",
+    "HTTP": ""
+  },
+  "USER_AGENT": ""
+}
