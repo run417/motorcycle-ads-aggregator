@@ -237,20 +237,52 @@ def filter_fetched_ad_ids(_ad_id_list: list) -> list:
     return filtered
 
 
+def get_ad_details(_response_json: dict) -> list:
+    """get ad details in a list from response dict (json)
+
+    Depends on expected KEY_LIST constant. KEY_LIST contains all expected properties
+
+    :param _response_json: dict
+    :return: ad details
+    """
+    _ad = []
+    ad_json = _response_json["ad"]
+    _ad_id = ad_json["id"]
+    for key in KEY_LIST:
+        if key not in ad_json:
+            logger.info(f"Key - {key} not found in ad - {_ad_id}, substituting with None")
+            _ad.append(None)
+            continue
+        if key == "properties":
+            properties_tuple_list.extend(get_properties_tuple(ad_json[key], ad_json["id"]))
+        elif key == "money":  # money.amount
+            _ad.append(ad_json[key]["amount"])
+        elif key == "location":  # location.name
+            _ad.append(ad_json[key]["name"])
+        elif key == "area":  # area.name
+            _ad.append((ad_json[key]["name"]))
+        elif key == "contact_card":
+            phone_tuple_list.extend(get_phone_tuple(ad_json[key], ad_json["id"]))
+        else:
+            _ad.append(ad_json[key])
+    return _ad
+
+
+def make_request(_url: str) -> requests.Response:
+    logger.info(f"Sending request to url: {_url}")
+    _response = requests.get(_url, headers=headers)
+    logger.info(f"Server responded with {_response.status_code}")
+    logger.info(f"Waiting for {WAIT_SECONDS} seconds")
+    time.sleep(WAIT_SECONDS)
+    return _response
+
+
 while len(ads_fetched) < FETCH_LIMIT and next_page_number <= total_pages_approx:
     try:
         # get the ad list
         ad_list_url = AD_LIST_BASE_URL + str(next_page_number)
-
-        logger.info(f"Requesting ad list page with url: {ad_list_url}")
-
-        response = requests.get(ad_list_url, headers=headers)
+        response = make_request(ad_list_url)
         ad_list_request_count += 1
-
-        logger.info(f"Server responded with {response.status_code}")
-        logger.info(f"Waiting for {WAIT_SECONDS} seconds")
-
-        time.sleep(WAIT_SECONDS)
 
         if response.status_code == HTTP_SUCCESS:
             response_json = response.json()
@@ -263,7 +295,6 @@ while len(ads_fetched) < FETCH_LIMIT and next_page_number <= total_pages_approx:
                 total_ads = pagination_data["total"]
                 ads_per_page = pagination_data["pageSize"]
                 total_pages_approx = math.ceil(total_ads / ads_per_page)
-
             current_page = pagination_data["activePage"]
 
             pages_fetched += 1
@@ -309,46 +340,18 @@ while len(ads_fetched) < FETCH_LIMIT and next_page_number <= total_pages_approx:
                 if len(ads_fetched) >= FETCH_LIMIT:
                     break
 
-                temp_ad = []
                 # fetch ad with id
                 ad_url = AD_DETAIL_BASE_URL + ad_id
-                logger.info(f"Requesting ad details with url: {ad_url}")
-
-                response = requests.get(ad_url, headers={"User-Agent": USER_AGENT, "referer": referer})
+                response = make_request(ad_url)
                 ad_detail_request_count += 1
 
-                logger.info(f"Responded with status {response.status_code}")
-
-                logger.info(f"Waiting for {WAIT_SECONDS} seconds")
-                time.sleep(WAIT_SECONDS)
-
                 if response.status_code == HTTP_SUCCESS:
-                    ad_json = response.json()
-                    ad = ad_json["ad"]
-                    for key in KEY_LIST:
-                        if key not in ad:
-                            logger.info(f"Key - {key} not found in ad - {ad_id}, substituting with None")
-                            temp_ad.append(None)
-                            continue
-                        if key == "properties":
-                            properties_tuple_list.extend(get_properties_tuple(ad[key], ad["id"]))
-                        elif key == "money":  # money.amount
-                            temp_ad.append(ad[key]["amount"])
-                        elif key == "location":  # location.name
-                            temp_ad.append(ad[key]["name"])
-                        elif key == "area":  # area.name
-                            temp_ad.append((ad[key]["name"]))
-                        elif key == "contact_card":
-                            phone_tuple_list.extend(get_phone_tuple(ad[key], ad["id"]))
-                        else:
-                            temp_ad.append(ad[key])
+                    ad = get_ad_details(response.json())
+                    print(ad)
+                    ad_tuple_list.append(tuple(ad))
 
-                    print(temp_ad)
-                    ad_tuple_list.append(tuple(temp_ad))
-
-                    # note the ads fetched in this session
-                    ads_fetched[ad["id"]] = FROM_SERVER  # only the key matters
-
+                    #  note the ads fetched in this session. ad[0] contains the ad id
+                    ads_fetched[ad[0]] = FROM_SERVER  # only the key matters
                     logger.info(f"Fetched {ad_id} successfully")
                 else:
                     logger.critical(f"Failed to fetch ad {ad_id} with status {response.status_code}")
