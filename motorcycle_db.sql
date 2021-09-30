@@ -65,6 +65,32 @@ CREATE TABLE `properties` (
   `prop_value` varchar(255) COLLATE utf8mb4_unicode_520_ci NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_520_ci;
 
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `riyasewana_ad`
+--
+
+CREATE TABLE `riyasewana_ad` (
+  `primary_id` int(11) NOT NULL,
+  `ad_id` varchar(64) COLLATE utf8mb4_unicode_520_ci NOT NULL,
+  `name` varchar(255) COLLATE utf8mb4_unicode_520_ci NOT NULL,
+  `number` varchar(255) COLLATE utf8mb4_unicode_520_ci NOT NULL,
+  `location` varchar(255) COLLATE utf8mb4_unicode_520_ci NOT NULL,
+  `url` varchar(255) COLLATE utf8mb4_unicode_520_ci NOT NULL,
+  `title` varchar(255) COLLATE utf8mb4_unicode_520_ci NOT NULL,
+  `price` varchar(255) COLLATE utf8mb4_unicode_520_ci NOT NULL,
+  `datetime` datetime NOT NULL,
+  `make` varchar(255) COLLATE utf8mb4_unicode_520_ci NOT NULL,
+  `model` varchar(255) COLLATE utf8mb4_unicode_520_ci NOT NULL,
+  `yom` int(4) NOT NULL,
+  `mileage` varchar(255) COLLATE utf8mb4_unicode_520_ci NOT NULL,
+  `engine_cc` varchar(255) COLLATE utf8mb4_unicode_520_ci NOT NULL,
+  `start_type` varchar(255) COLLATE utf8mb4_unicode_520_ci NOT NULL,
+  `details` varchar(255) COLLATE utf8mb4_unicode_520_ci NOT NULL,
+  `_created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_520_ci;
+
 --
 -- Indexes for dumped tables
 --
@@ -88,6 +114,12 @@ ALTER TABLE `properties`
   ADD PRIMARY KEY (`primary_id`);
 
 --
+-- Indexes for table `riyasewana_ad`
+--
+ALTER TABLE `riyasewana_ad`
+  ADD PRIMARY KEY (`primary_id`);
+
+--
 -- AUTO_INCREMENT for dumped tables
 --
 
@@ -107,6 +139,12 @@ ALTER TABLE `phone`
 -- AUTO_INCREMENT for table `properties`
 --
 ALTER TABLE `properties`
+  MODIFY `primary_id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `riyasewana_ad`
+--
+ALTER TABLE `riyasewana_ad`
   MODIFY `primary_id` int(11) NOT NULL AUTO_INCREMENT;
 COMMIT;
 

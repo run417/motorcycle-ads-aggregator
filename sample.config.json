@@ -1,14 +1,25 @@
 {
-  "FETCH_LIMIT": 10,
   "WAIT_SECONDS": 3,
   "MAX_FAILS": 2,
-  "DATABASE_NAME": "",
-  "USERNAME": "",
+  "DATABASE_NAME": "motorcycle_db",
+  "USERNAME": "root",
   "PASSWORD": "",
-  "HOSTNAME": "",
+  "HOSTNAME": "localhost",
   "PROXIES": {
     "HTTPS": "",
     "HTTP": ""
   },
-  "USER_AGENT": ""
+  "USER_AGENT": "",
+  "SOURCES": [
+    {
+      "name": "ikman",
+      "limit": 10,
+      "fetch_type": "all"
+    },
+    {
+      "name": "riyasewana",
+      "limit": 10,
+      "fetch_type": "all"
+    }
+  ]
 }
